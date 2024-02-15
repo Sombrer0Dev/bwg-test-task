@@ -1,0 +1,6 @@
+env: "local"
+conn_str: "<db connection string>"
+http_server:
+  address: "<server address>"
+  timeout: 4s
+  idle_timeout: 60s

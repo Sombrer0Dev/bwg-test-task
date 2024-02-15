@@ -10,6 +10,7 @@ import (
 
 	"github.com/Sombrer0Dev/bwg-test-task/internal/config"
 	"github.com/Sombrer0Dev/bwg-test-task/internal/http-server/handlers/account/add"
+	"github.com/Sombrer0Dev/bwg-test-task/internal/http-server/handlers/account/invoice"
 	mwLogger "github.com/Sombrer0Dev/bwg-test-task/internal/http-server/middleware/logger"
 	"github.com/Sombrer0Dev/bwg-test-task/internal/storage/postgres"
 	"github.com/Sombrer0Dev/bwg-test-task/internal/utils/logger/handlers/slogpretty"
@@ -49,7 +50,8 @@ func main() {
 	router.Use(middleware.Recoverer)
 	router.Use(middleware.URLFormat)
 
-	router.Post("/account/add", add.New(log, storage))
+	router.Post("/add", add.New(log, storage))
+	router.Post("/invoice", invoice.New(log, storage))
 
 	log.Info("starting server", slog.String("address", cfg.HTTPServer.Address))
 

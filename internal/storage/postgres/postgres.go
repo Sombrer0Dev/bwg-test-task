@@ -2,13 +2,10 @@ package postgres
 
 import (
 	"database/sql"
-	"errors"
 	"fmt"
 
 	"github.com/google/uuid"
 	_ "github.com/lib/pq"
-
-	"github.com/Sombrer0Dev/bwg-test-task/internal/storage"
 )
 
 type Storage struct {
@@ -26,45 +23,63 @@ func New(connStr string) (*Storage, error) {
 	return &Storage{db: db}, nil
 }
 
-func (s *Storage) AddAccount(currency string) (uuid.UUID, int64, error) {
-	const op = "storage.sqlite.SaveURL"
+func (s *Storage) AddAccount(currency string) (uuid.UUID, error) {
+	const op = "storage.postgres.Add"
 
 	// using uuid here because it's the easiest way to implement unique value
 	wallet := uuid.New()
 
-	stmt, err := s.db.Prepare("INSERT INTO account(currency, wallet) VALUES (?, ?)")
+	stmt, err := s.db.Prepare("INSERT INTO account(currency, wallet) VALUES ($1, $2)")
 	if err != nil {
-		return uuid.Nil, 0, fmt.Errorf("%s: prepare statement: %w", op, err)
+		return uuid.Nil, fmt.Errorf("%s: prepare statement: %w", op, err)
 	}
 
-	res, err := stmt.Exec(currency, wallet)
+	_, err = stmt.Exec(currency, wallet)
 	if err != nil {
-		return uuid.Nil, 0, fmt.Errorf("%s: execute statement: %w", op, err)
+		return uuid.Nil, fmt.Errorf("%s: execute statement: %w", op, err)
 	}
-	id, err := res.LastInsertId()
-	if err != nil {
-		return uuid.Nil, 0, fmt.Errorf("%s: failed to get last inserted id: %w", op, err)
-	}
-	return wallet, id, nil
+
+	return wallet, nil
 }
 
-func (s *Storage) GetURL(id int) (string, error) {
-	const op = "storage.sqlite.GetURL"
+func (s *Storage) Invoice(currency string, wallet uuid.UUID, amount float64) error {
+	const op = "storage.postgres.Invoice"
 
-	stmt, err := s.db.Prepare(`SELECT url FROM url WHERE id = ?`)
-	if err != nil {
-		return "", fmt.Errorf("%s: prepare statement: %w", op, err)
-	}
-
-	var res string
-
-	err = stmt.QueryRow(id).Scan(&res)
-	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return "", storage.ErrURLNotFound
+	if ok, err := s.checkCurrency(wallet, currency); !ok {
+		if err != nil {
+			return fmt.Errorf("%s: checking currency: %w", op, err)
 		}
-		return "", fmt.Errorf("%s: execute statement: %w", op, err)
+		return fmt.Errorf("%s: currency does not match", op)
 	}
 
-	return res, nil
+	stmt, err := s.db.Prepare(`UPDATE account SET balance = balance + $1 WHERE wallet = $2`)
+	if err != nil {
+		return fmt.Errorf("%s: prepare statement: %w", op, err)
+	}
+
+	_, err = stmt.Exec(amount, wallet)
+	if err != nil {
+		return fmt.Errorf("%s: execute statement: %w", op, err)
+	}
+
+	return nil
+}
+
+func (s *Storage) checkCurrency(wallet uuid.UUID, currency string) (bool, error) {
+	const op = "storage.postgres.getCurrency"
+
+	stmt, err := s.db.Prepare(`SELECT (currency=$1) FROM account WHERE wallet = $2`)
+	if err != nil {
+		return false, fmt.Errorf("%s: prepare statement: %w", op, err)
+	}
+
+	var match bool
+	if err := stmt.QueryRow(currency, wallet).Scan(&match); err != nil {
+		if err == sql.ErrNoRows {
+			return false, fmt.Errorf("%s: unknown wallet: %w", op, err)
+		}
+		return false, fmt.Errorf("%s: query statement: %w", op, err)
+	}
+
+	return match, nil
 }

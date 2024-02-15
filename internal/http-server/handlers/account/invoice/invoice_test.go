@@ -1,4 +1,4 @@
-package add_test
+package invoice_test
 
 import (
 	"bytes"
@@ -13,30 +13,39 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/Sombrer0Dev/bwg-test-task/internal/http-server/handlers/account/add"
-	"github.com/Sombrer0Dev/bwg-test-task/internal/http-server/handlers/account/add/mocks"
+	"github.com/Sombrer0Dev/bwg-test-task/internal/http-server/handlers/account/invoice"
+	"github.com/Sombrer0Dev/bwg-test-task/internal/http-server/handlers/account/invoice/mocks"
 	"github.com/Sombrer0Dev/bwg-test-task/internal/utils/logger/handlers/slogdiscard"
 )
 
-func TestAddHandler(t *testing.T) {
+func TestInvoiceHandler(t *testing.T) {
 	cases := []struct {
 		name      string
 		currency  string
+		amount    float64
+		wallet    uuid.UUID
 		respError string
 		mockError error
 	}{
 		{
 			name:     "Success",
 			currency: "USD",
-		},
-		{
-			name:      "Empty Currency",
-			currency:  "",
-			respError: "field Currency is a required field",
+			wallet:   uuid.New(),
+			amount:   1.1,
 		},
 		{
 			name:      "Invalid Currency",
 			currency:  "some invalid currency",
+			wallet:    uuid.New(),
+			amount:    1.1,
 			respError: "field Currency is not valid",
+		},
+		{
+			name:      "Invalid Amount",
+			currency:  "USD",
+			wallet:    uuid.New(),
+			amount:    -10,
+			respError: "field Amount is not valid",
 		},
 	}
 
@@ -45,14 +54,14 @@ func TestAddHandler(t *testing.T) {
 			tc := tc
 			t.Parallel()
 
-			AccountMock := mocks.NewAccountAdder(t)
+			AccountMock := mocks.NewAccountInvoicer(t)
 
 			if tc.respError == "" || tc.mockError != nil {
-				AccountMock.On("AddAccount", tc.currency, mock.AnythingOfType("string")).Return(uuid.New(), tc.mockError).Once()
+				AccountMock.On("Invoice", tc.currency, tc.wallet, tc.amount, mock.AnythingOfType("string")).Return(tc.mockError).Once()
 			}
 
-			handler := add.New(slogdiscard.NewDiscardLogger(), AccountMock)
-			input := fmt.Sprintf(`{"currency": "%s"}`, tc.currency)
+			handler := invoice.New(slogdiscard.NewDiscardLogger(), AccountMock)
+			input := fmt.Sprintf(`{"currency": "%s", "wallet": "%s", "amount": %f}`, tc.currency, tc.wallet, tc.amount)
 
 			req, err := http.NewRequest(http.MethodPost, "/add", bytes.NewReader([]byte(input)))
 			require.NoError(t, err)

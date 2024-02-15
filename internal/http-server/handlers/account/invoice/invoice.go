@@ -1,4 +1,4 @@
-package add
+package invoice
 
 import (
 	"log/slog"
@@ -14,21 +14,23 @@ import (
 )
 
 type Request struct {
-	Currency string `json:"currency" validate:"required,iso4217"`
+	Currency string    `json:"currency" validate:"required,iso4217"`
+	Wallet   uuid.UUID `json:"wallet"  validate:"required,uuid"`
+	Amount   float64   `json:"amount" validate:"required,gte=0"`
 }
 
 type Response struct {
 	response.Response
-	Error  string    `json:"error,omitempty"`
-	Wallet uuid.UUID `json:"wallet,omitempty"`
+	Error   string  `json:"error,omitempty"`
+	Balance float64 `json:"wallet,omitempty"`
 }
 
-//go:generate go run github.com/vektra/mockery/v2@v2.28.2 --name=AccountAdder
-type AccountAdder interface {
-	AddAccount(currency string) (uuid.UUID, error)
+//go:generate go run github.com/vektra/mockery/v2@v2.28.2 --name=AccountInvoicer
+type AccountInvoicer interface {
+	Invoice(currency string, wallet uuid.UUID, amount float64) error
 }
 
-func New(log *slog.Logger, Account AccountAdder) http.HandlerFunc {
+func New(log *slog.Logger, Account AccountInvoicer) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		const op = "handlers.url.save.New"
 
@@ -60,22 +62,21 @@ func New(log *slog.Logger, Account AccountAdder) http.HandlerFunc {
 			return
 		}
 
-		wallet,  err := Account.AddAccount(req.Currency)
+		err = Account.Invoice(req.Currency, req.Wallet, req.Amount)
 		if err != nil {
-			log.Error("failed to add account", sl.Err(err))
+			log.Error("failed to get invoice", sl.Err(err))
 
-			render.JSON(w, r, response.Error("failed to add account"))
+			render.JSON(w, r, response.Error("failed to get invoice"))
 		}
 
-		log.Info("account added")
+		log.Info("invoice started")
 
-		responseOK(w, r, wallet)
+		responseOK(w, r)
 	}
 }
 
-func responseOK(w http.ResponseWriter, r *http.Request, wallet uuid.UUID) {
+func responseOK(w http.ResponseWriter, r *http.Request) {
 	render.JSON(w, r, Response{
 		Response: response.OK(),
-		Wallet:   wallet,
 	})
 }
