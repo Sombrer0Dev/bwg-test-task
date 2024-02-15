@@ -33,6 +33,7 @@ func (s *Storage) AddAccount(currency string) (uuid.UUID, error) {
 	if err != nil {
 		return uuid.Nil, fmt.Errorf("%s: prepare statement: %w", op, err)
 	}
+	defer stmt.Close()
 
 	_, err = stmt.Exec(currency, wallet)
 	if err != nil {
@@ -56,6 +57,7 @@ func (s *Storage) Invoice(currency string, wallet uuid.UUID, amount float64) err
 	if err != nil {
 		return fmt.Errorf("%s: prepare statement: %w", op, err)
 	}
+	defer stmt.Close()
 
 	_, err = stmt.Exec(amount, wallet)
 	if err != nil {
@@ -72,6 +74,7 @@ func (s *Storage) checkCurrency(wallet uuid.UUID, currency string) (bool, error)
 	if err != nil {
 		return false, fmt.Errorf("%s: prepare statement: %w", op, err)
 	}
+	defer stmt.Close()
 
 	var match bool
 	if err := stmt.QueryRow(currency, wallet).Scan(&match); err != nil {
